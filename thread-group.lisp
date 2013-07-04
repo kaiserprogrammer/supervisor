@@ -157,21 +157,30 @@
 
 (define-test stop-from-lambda
   (with-setup
-    (let ((arun nil))
+    (let ((arun nil)
+          (brun nil)
+          (crun nil))
       (add-lambda (lambda () (sleep 0.002) (setf arun t)))
+      (add-lambda (lambda () (setf crun t)))
       (add-lambda (lambda () (sleep 0.001) (stop)))
+      (add-lambda (lambda () (sleep 0.002) (setf brun t)))
       (start)
       (sleep 0.01)
-      (assert-false arun))))
+      (assert-false arun)
+      (assert-false brun)
+      (assert-true crun))))
 
 (define-test stop-immediately-after-start
   (with-setup
-    (let ((arun nil))
+    (let ((arun nil)
+          (brun nil))
       (add-lambda (lambda () (sleep 0.002) (setf arun t)))
       (add-lambda (lambda () (stop)))
+      (add-lambda (lambda () (sleep 0.002) (setf brun t)))
       (start)
       (sleep 0.01)
-      (assert-false arun))))
+      (assert-false arun)
+      (assert-false brun))))
 
 (let ((*print-failures* t)
       (*print-errors* t))
