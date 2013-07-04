@@ -13,7 +13,7 @@
    (checker :initform nil
             :accessor checker)
    (name :initarg :name
-         :initform nil
+         :initform (concatenate 'string (princ-to-string (gensym "ThreadGroup")) ":")
          :accessor name)))
 
 (defun start (&key (runner *runner*) (check-sleep 5))
@@ -29,8 +29,12 @@
                          (function (cdr task))
                          (thr (find name (threads runner) :key #'car :test #'equalp)))
                     (when (not (and (cdr thr) (bt:thread-alive-p (cdr thr))))
+                      (stop-thread runner name)
                       (setf (threads runner) (remove name (threads runner) :key #'car :test #'equalp))
-                      (push (cons name (bt:make-thread function :name (or name (name runner))))
+                      (push (cons name (bt:make-thread
+                                        (lambda ()
+                                          (let ((*runner* runner))
+                                            (funcall function))) :name (concatenate 'string (name runner) name)))
                             (threads runner)))))
                 (sleep check-sleep)))
            :name (concatenate 'string (name runner) " checker")))))
@@ -43,14 +47,14 @@
   (let ((threads (mapcar #'cdr (threads runner))))
     (when (checker runner)
       (push (checker runner) threads))
-   (dolist (thr threads)
-     (when (bt:thread-alive-p thr)
-       (bt:destroy-thread thr))))
+    (dolist (thr threads)
+      (when (bt:thread-alive-p thr)
+        (ignore-errors (bt:destroy-thread thr)))))
   (setf (checker runner) nil))
 
 (defun add-lambda (function &key (runner *runner*)
                          (name (princ-to-string
-                                (gensym (string-upcase (princ-to-string (name runner)))))))
+                                (gensym (princ-to-string (name runner))))))
   (push (cons name function) (tasks runner)))
 
 (defun remove-lambda (name &key (runner *runner*))
@@ -72,7 +76,7 @@
          (*runner* (make-instance 'thread-group)))
      (unwind-protect (progn ,@body)
        (stop))
-     (sleep 0.0001)
+     (sleep 0.001)
      (assert-eql threads-count (length (bt:all-threads)))))
 
 (define-test return-when-empty
@@ -112,7 +116,7 @@
       (start)
       (sleep 0.001)
       (remove-lambda "short run")
-      (sleep 0.0001)
+      (sleep 0.001)
       (assert-true run)
       (assert-false long-run))))
 
@@ -123,8 +127,8 @@
       (add-lambda (lambda () (if (not run)
                        (setf run t)
                        (setf restart t))))
-      (start :check-sleep 0.00001)
-      (sleep 0.001)
+      (start :check-sleep 0.0001)
+      (sleep 0.01)
       (assert-true run)
       (assert-true restart))))
 
@@ -136,7 +140,7 @@
       (start :check-sleep 0.000001)
       (sleep 0.00001)
       (add-lambda (lambda () (setf brun t)) :name "overrun")
-      (sleep 0.001)
+      (sleep 0.01)
       (assert-true arun)
       (assert-true brun))))
 
@@ -150,6 +154,24 @@
       (sleep 0.001)
       (assert-true arun)
       (assert-true brun))))
+
+(define-test stop-from-lambda
+  (with-setup
+    (let ((arun nil))
+      (add-lambda (lambda () (sleep 0.002) (setf arun t)))
+      (add-lambda (lambda () (sleep 0.001) (stop)))
+      (start)
+      (sleep 0.01)
+      (assert-false arun))))
+
+(define-test stop-immediately-after-start
+  (with-setup
+    (let ((arun nil))
+      (add-lambda (lambda () (sleep 0.002) (setf arun t)))
+      (add-lambda (lambda () (stop)))
+      (start)
+      (sleep 0.01)
+      (assert-false arun))))
 
 (let ((*print-failures* t)
       (*print-errors* t))
