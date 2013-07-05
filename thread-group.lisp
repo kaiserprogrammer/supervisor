@@ -1,5 +1,13 @@
 (defpackage :thread-group
-  (:use :cl :lisp-unit))
+  (:use :cl :lisp-unit)
+  (:export
+   #:thread-group
+   #:start
+   #:join
+   #:stop
+   #:add-lambda
+   #:remove-lambda
+   #:*runner*))
 
 (in-package :thread-group)
 
@@ -13,7 +21,7 @@
    (checker :initform nil
             :accessor checker)
    (name :initarg :name
-         :initform (concatenate 'string (princ-to-string (gensym "ThreadGroup")) ":")
+         :initform (princ-to-string (gensym "ThreadGroup"))
          :accessor name)))
 
 (defun start (&key (runner *runner*) (check-sleep 5))
@@ -38,8 +46,9 @@
                                                  (funcall function))) :name (concatenate 'string (name runner) name)))
                                  (threads runner)))))
                      (sleep check-sleep))
-               (stop :runner runner)))
-           :name (concatenate 'string (name runner) " checker")))))
+               (when (checker runner)
+                 (stop :runner runner))))
+           :name (concatenate 'string (name runner) ":checker")))))
 
 (defun join (&key (runner *runner*))
   (when (checker runner)
@@ -49,10 +58,13 @@
   (let ((threads (mapcar #'cdr (threads runner))))
     (when (checker runner)
       (push (checker runner) threads))
+    (setf (checker runner) nil)
+    (let ((thr (bt:current-thread)))
+      (when (member thr threads :test #'eq)
+        (setf threads (append (remove (bt:current-thread) threads :test #'eq) (list thr)))))
     (dolist (thr threads)
       (when (bt:thread-alive-p thr)
-        (ignore-errors (bt:destroy-thread thr)))))
-  (setf (checker runner) nil))
+        (ignore-errors (sb-thread:terminate-thread thr))))))
 
 (defun add-lambda (function &key (runner *runner*)
                          (name (princ-to-string
@@ -67,7 +79,7 @@
 (defmethod stop-thread ((group thread-group) name)
   (let ((thr (find name (threads group) :key #'car :test #'equalp)))
     (when (and (cdr thr) (bt:thread-alive-p (cdr thr)))
-      (bt:destroy-thread (cdr thr)))))
+      (sb-thread:terminate-thread (cdr thr)))))
 
 (defmethod thread-start ((group thread-group)))
 
@@ -165,9 +177,10 @@
       (add-lambda (lambda () (sleep 0.002) (setf arun t)))
       (add-lambda (lambda () (setf crun t)))
       (add-lambda (lambda () (sleep 0.001) (stop)))
-      (add-lambda (lambda () (sleep 0.002) (setf brun t)))
+      (add-lambda (lambda () (sleep 0.01) (setf brun t)))
       (start)
-      (sleep 0.01)
+      (sleep 0.1)
+      (stop)
       (assert-false arun)
       (assert-false brun)
       (assert-true crun))))
@@ -176,11 +189,11 @@
   (with-setup
     (let ((arun nil)
           (brun nil))
-      (add-lambda (lambda () (sleep 0.002) (setf arun t)))
+      (add-lambda (lambda () (sleep 0.09) (setf arun t)))
       (add-lambda (lambda () (stop)))
-      (add-lambda (lambda () (sleep 0.002) (setf brun t)))
+      (add-lambda (lambda () (sleep 0.09) (setf brun t)))
       (start)
-      (sleep 0.01)
+      (sleep 0.1)
       (assert-false arun)
       (assert-false brun))))
 
@@ -196,7 +209,7 @@
       (add-lambda (lambda () (loop (sleep 1))))
       (start)
       (sleep 0.001)
-      (bt:destroy-thread (checker *runner*))
+      (sb-thread:terminate-thread (checker *runner*))
       (sleep 0.001)
       (assert-eql thread-count (length (bt:all-threads))))))
 
@@ -210,6 +223,17 @@
       (start)
       (sleep 0.001)
       (assert-eql (+ 2 thread-count) (length (bt:all-threads))))))
+
+(define-test stopping-own-lambda
+  (with-setup
+    (let ((run nil)
+          (cleanup nil))
+      (add-lambda (lambda () (unwind-protect (progn (stop) (setf run t))
+                     (setf cleanup t))))
+      (start)
+      (sleep 0.01)
+      (assert-false run)
+      (assert-true cleanup))))
 
 (define-test stop-when-one-fails-when-quitter)
 
