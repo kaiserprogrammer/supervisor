@@ -182,6 +182,14 @@
       (assert-false arun)
       (assert-false brun))))
 
+(define-test dont-execute-after-stop
+  (with-setup
+    (let ((run nil))
+      (add-lambda (lambda () (stop) (setf run t)))
+      (assert-false run))))
+
+(define-test stop-when-one-fails-when-quitter)
+
 (let ((*print-failures* t)
       (*print-errors* t))
   (run-tests :all))
