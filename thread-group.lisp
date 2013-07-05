@@ -200,6 +200,17 @@
       (sleep 0.001)
       (assert-eql thread-count (length (bt:all-threads))))))
 
+(define-test multiple-starts-are-ignorred
+  (with-setup
+    (let ((thread-count (length (bt:all-threads))))
+      (add-lambda (lambda () (loop (sleep 1))))
+      (start)
+      (start)
+      (sleep 0.001)
+      (start)
+      (sleep 0.001)
+      (assert-eql (+ 2 thread-count) (length (bt:all-threads))))))
+
 (define-test stop-when-one-fails-when-quitter)
 
 (let ((*print-failures* t)
