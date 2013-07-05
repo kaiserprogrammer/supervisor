@@ -23,20 +23,22 @@
     (setf (checker runner)
           (bt:make-thread
            (lambda ()
-             (loop
-                (dolist (task (tasks runner))
-                  (let* ((name (car task))
-                         (function (cdr task))
-                         (thr (find name (threads runner) :key #'car :test #'equalp)))
-                    (when (not (and (cdr thr) (bt:thread-alive-p (cdr thr))))
-                      (stop-thread runner name)
-                      (setf (threads runner) (remove name (threads runner) :key #'car :test #'equalp))
-                      (push (cons name (bt:make-thread
-                                        (lambda ()
-                                          (let ((*runner* runner))
-                                            (funcall function))) :name (concatenate 'string (name runner) name)))
-                            (threads runner)))))
-                (sleep check-sleep)))
+             (unwind-protect
+                  (loop
+                     (dolist (task (tasks runner))
+                       (let* ((name (car task))
+                              (function (cdr task))
+                              (thr (find name (threads runner) :key #'car :test #'equalp)))
+                         (when (not (and (cdr thr) (bt:thread-alive-p (cdr thr))))
+                           (stop-thread runner name)
+                           (setf (threads runner) (remove name (threads runner) :key #'car :test #'equalp))
+                           (push (cons name (bt:make-thread
+                                             (lambda ()
+                                               (let ((*runner* runner))
+                                                 (funcall function))) :name (concatenate 'string (name runner) name)))
+                                 (threads runner)))))
+                     (sleep check-sleep))
+               (stop :runner runner)))
            :name (concatenate 'string (name runner) " checker")))))
 
 (defun join (&key (runner *runner*))
@@ -187,6 +189,16 @@
     (let ((run nil))
       (add-lambda (lambda () (stop) (setf run t)))
       (assert-false run))))
+
+(define-test stop-group-when-checker-is-interrupted
+  (with-setup
+    (let ((thread-count (length (bt:all-threads))))
+      (add-lambda (lambda () (loop (sleep 1))))
+      (start)
+      (sleep 0.001)
+      (bt:destroy-thread (checker *runner*))
+      (sleep 0.001)
+      (assert-eql thread-count (length (bt:all-threads))))))
 
 (define-test stop-when-one-fails-when-quitter)
 
