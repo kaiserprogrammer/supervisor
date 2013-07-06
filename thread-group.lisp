@@ -97,8 +97,6 @@
     (when (and (cdr thr) (bt:thread-alive-p (cdr thr)))
       (bt:destroy-thread (cdr thr)))))
 
-(defmethod thread-start ((group thread-group)))
-
 (remove-tests :all)
 
 (defmacro with-setup (&body body)
