@@ -1,7 +1,7 @@
-(defpackage :thread-group
+(defpackage :supervisor
   (:use :cl)
   (:export
-   #:thread-group
+   #:supervisor
    #:start
    #:join
    #:stop
@@ -9,11 +9,11 @@
    #:remove-lambda
    #:*runner*))
 
-(in-package :thread-group)
+(in-package :supervisor)
 
 (defvar *runner*)
 
-(defclass thread-group ()
+(defclass supervisor ()
   ((tasks :initform (list)
           :accessor tasks)
    (threaded-tasks :initform (list)
@@ -92,7 +92,7 @@
   (setf (tasks runner) (remove name (tasks runner) :key #'car :test #'equalp))
   (setf (threads runner) (remove name (threads runner) :key #'car :test #'equalp)))
 
-(defmethod stop-thread ((group thread-group) name)
+(defmethod stop-thread ((group supervisor) name)
   (let ((thr (find name (threads group) :key #'car :test #'equalp)))
     (when (and (cdr thr) (bt:thread-alive-p (cdr thr)))
       (bt:destroy-thread (cdr thr)))))

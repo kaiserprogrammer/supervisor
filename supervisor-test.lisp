@@ -1,12 +1,12 @@
-(defpackage :thread-group.test
-  (:use :cl :thread-group :lisp-unit))
-(in-package :thread-group.test)
+(defpackage :supervisor.test
+  (:use :cl :supervisor :lisp-unit))
+(in-package :supervisor.test)
 
 (remove-tests :all)
 
 (defmacro with-setup (&body body)
   `(let ((threads-count (length (bt:all-threads)))
-         (*runner* (make-instance 'thread-group)))
+         (*runner* (make-instance 'supervisor)))
      (unwind-protect (progn ,@body)
        (stop))
      (sleep 0.001)
@@ -18,7 +18,7 @@
     (assert-false (join))))
 
 (define-test fast-stop
-  (let ((*runner* (make-instance 'thread-group))
+  (let ((*runner* (make-instance 'supervisor))
         (thread-count (length (bt:all-threads)))
         (run nil))
     (add-lambda (lambda () (setf run t) (stop)))
@@ -145,7 +145,7 @@
       (add-lambda (lambda () (loop (sleep 1))))
       (start)
       (sleep 0.001)
-      (bt:destroy-thread (thread-group::checker *runner*))
+      (bt:destroy-thread (supervisor::checker *runner*))
       (sleep 0.001)
       (assert-eql thread-count (length (bt:all-threads))))))
 
@@ -176,4 +176,4 @@
 
 (let ((*print-failures* t)
       (*print-errors* t))
-  (thread-group.test::run-tests :all))
+  (supervisor.test::run-tests :all))
