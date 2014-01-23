@@ -1,17 +1,14 @@
 (defpackage :supervisor
   (:use :cl)
   (:export
-   #:supervisor
+   #:make-supervisor
    #:start
    #:join
    #:stop
    #:add-lambda
-   #:remove-lambda
-   #:*runner*))
+   #:remove-lambda))
 
 (in-package :supervisor)
-
-(defvar *runner*)
 
 (defclass supervisor ()
   ((tasks :initform (list)
@@ -26,7 +23,10 @@
    (lock :accessor lock
          :initform (bt:make-lock))))
 
-(defun start (&key (runner *runner*) (check-sleep 5))
+(defun make-supervisor ()
+  (make-instance 'supervisor))
+
+(defun start (runner &key (check-sleep 5))
   (when (and (not (and (checker runner)
                        (bt:thread-alive-p (checker runner))))
              (not (zerop (length (tasks runner)))))
@@ -45,20 +45,19 @@
                              (setf (threads runner) (remove name (threads runner) :key #'car :test #'equalp))
                              (push (cons name (bt:make-thread
                                                (lambda ()
-                                                 (let ((*runner* runner))
-                                                   (funcall function))) :name (concatenate 'string (name runner) ":" name)))
+                                                 (funcall function)) :name (concatenate 'string (name runner) ":" name)))
                                    (threads runner))))))
                      (sleep check-sleep))
                (when (checker runner)
                  (setf (checker runner) nil)
-                 (stop :runner runner))))
+                 (stop runner))))
            :name (concatenate 'string (name runner) ":checker")))))
 
-(defun join (&key (runner *runner*))
+(defun join (runner)
   (when (checker runner)
     (bt:join-thread (checker runner))))
 
-(defun stop (&key (runner *runner*))
+(defun stop (runner)
   (when (checker runner)
     (bt:with-lock-held ((lock runner))
       (let ((thr (checker runner)))
@@ -82,12 +81,10 @@
                     (invoke-restart restart))))))
           (bt:destroy-thread thr))))))
 
-(defun add-lambda (function &key (runner *runner*)
-                         (name (princ-to-string
-                                (gensym))))
+(defun add-lambda (runner function &key (name (princ-to-string (gensym))))
   (push (cons name function) (tasks runner)))
 
-(defun remove-lambda (name &key (runner *runner*))
+(defun remove-lambda (runner name)
   (stop-thread runner name)
   (setf (tasks runner) (remove name (tasks runner) :key #'car :test #'equalp))
   (setf (threads runner) (remove name (threads runner) :key #'car :test #'equalp)))
