@@ -94,7 +94,7 @@
       (add-lambda runner (lambda () (setf arun t)))
       (add-lambda runner (lambda () (setf brun t)))
       (start runner)
-      (sleep 0.001)
+      (sleep 0.01)
       (assert-true arun)
       (assert-true brun))))
 
